@@ -134,8 +134,8 @@ afterSwapReturnDelta: true     // Return subsidies/charges
 
 ```solidity
 function _afterSwap(...) internal override returns (bytes4, int128) {
-    // Estimate actual gas cost in USDC
-    uint256 actualGasCostUSDC = estimateGasCost();
+    // Estimate actual gas cost in USDC using Pool TWAP
+    uint256 actualGasCostUSDC = estimateGasCostTWAP();
 
     int256 delta = int256(TARGET_FEE) - int256(actualGasCostUSDC);
 
@@ -184,7 +184,7 @@ function _afterSwap(...) internal override returns (bytes4, int128) {
 ### 1. Institutional Treasury Management
 **Scenario:** Hedge fund executes 500 swaps/month
 
-**Traditional DeFi:**
+**Current Swaps:**
 - Gas costs: $25,000 - $75,000/month (highly variable)
 - Budget uncertainty prevents allocation
 
@@ -222,11 +222,11 @@ function _afterSwap(...) internal override returns (bytes4, int128) {
 ### Phase 1: MVP Development
 - [x] Design individual savings/borrowing model
 - [ ] Implement hook with credit accounting
-- [ ] Gas oracle integration (Chainlink + fallback)
+- [ ] Gas price estimation via Pool TWAP
 - [ ] ERC-4337 Paymaster contract
 - [ ] UserOperation validation logic
 - [ ] Testing on testnet
-- [ ] Frontend wallet integration (Safe, Biconomy)
+- [ ] Frontend wallet integration (Privy)
 
 ### Phase 2: Multi-Chain Deployment
 - [ ] Deploy on Base (low gas, high throughput)
@@ -236,8 +236,7 @@ function _afterSwap(...) internal override returns (bytes4, int128) {
 
 ### Phase 3: Treasury Optimization
 - [ ] **Deploy idle USDC to yield-bearing protocols**
-  - AAVE for lending (5% APY on USDC)
-  - Compound or Morpho as alternatives
+  - AAVE for lending (3% APY on USDC)
   - Circuit breakers for liquidity management
 - [ ] Dynamic rebalancing based on utilization
 - [ ] Risk management framework (max deployed %, withdraw limits)
@@ -246,7 +245,7 @@ function _afterSwap(...) internal override returns (bytes4, int128) {
 - [ ] Tiered pricing (volume discounts)
 - [ ] Corporate subscription plans
 - [ ] Analytics dashboard for users
-- [ ] Governance token for fee-sharing
+- [ ] Governance token for fee-sharing or voting on pricing
 
 ---
 
@@ -274,7 +273,7 @@ Deploying idle treasury USDC to AAVE for yield generation.
 - **Mainnet:** Only profitable if treasury > $50k and rebalancing weekly
 - **L2s:** Profitable at almost any scale due to negligible gas costs
 
-**Recommended strategy:**
+**Strategy:**
 - **L1:** Keep 100% liquid until treasury > $500k
 - **L2:** Deploy 70% to AAVE once treasury > $10k, keep 30% liquid
 
@@ -289,7 +288,7 @@ Fixed fee pricing is based on average gas consumption across typical swap scenar
 | Operation | Gas Used | Notes |
 |-----------|----------|-------|
 | beforeSwap hook | 50,000 | USDC transfer + accounting |
-| afterSwap hook | 80,000 | Gas calculation + balance update + oracle read |
+| afterSwap hook | 80,000 | Gas calculation + balance update + TWAP calculation |
 | Base swap (Uniswap v4) | 100,000 | Core routing logic |
 | **Total per swap** | **230,000** | Approximate |
 
@@ -354,7 +353,7 @@ Fixed fee pricing is based on average gas consumption across typical swap scenar
 #### Cost Structure
 
 1. **Gas subsidies:** High congestion periods
-2. **Oracle costs:** Chainlink price feeds (~$0.10/read on L1, negligible on L2)
+2. **Oracle costs:** $0 (using internal TWAP)
 3. **Infrastructure:** Paymaster execution costs (if used)
 4. **Development:** Ongoing maintenance and upgrades
 
@@ -364,7 +363,7 @@ Fixed fee pricing is based on average gas consumption across typical swap scenar
 ```
 Revenue:  1000 × $2.99 = $2,990
 Costs:    1000 × $1.50 = $1,500 (avg gas)
-          Oracle: $100
+          Oracle: $0
           Dev: $0 (amortized)
 Profit:   $1,390/month (46% margin)
 ```
@@ -373,7 +372,7 @@ Profit:   $1,390/month (46% margin)
 ```
 Revenue:  10,000 × $0.99 = $9,900
 Costs:    10,000 × $0.002 = $20 (avg gas)
-          Oracle: $5
+          Oracle: $0
           Dev: $0 (amortized)
 Profit:   $9,875/month (99.7% margin)
 
@@ -393,9 +392,9 @@ MIT
 ## Contact
 
 For questions, partnerships, or enterprise integration:
-- **Email:** diego@odisealabs.com
-- **Twitter:** @OdiseaLabs
-- **GitHub:** github.com/odisealabs/usdc-fees-hook
+- **Email:** diego@odisea.xyz
+- **Twitter:** @Diegolden-com
+- **GitHub:** github.com/Diegolden-com/usdc-fees-hook
 
 ---
 
