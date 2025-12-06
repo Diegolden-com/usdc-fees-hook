@@ -1,183 +1,402 @@
-# Uniswap v4 Hook Template
+# USDC Fixed-Fee Hook: Gas Cost Hedging for DeFi Swaps
 
-**A template for writing Uniswap v4 Hooks 🦄**
+**Author:** Diego Jiménez | DeFi Operations @ Odisea Labs | CFA L1
 
-### Get Started
+---
 
-This template provides a starting point for writing Uniswap v4 Hooks, including a simple example and preconfigured test environment. Start by creating a new repository using the "Use this template" button at the top right of this page. Alternatively you can also click this link:
+## Overview
 
-[![Use this Template](https://img.shields.io/badge/Use%20this%20Template-101010?style=for-the-badge&logo=github)](https://github.com/uniswapfoundation/v4-template/generate)
+A Uniswap v4 hook that enables **fixed-price swaps denominated in USDC**, abstracting away gas cost volatility for institutional and retail users. Instead of paying unpredictable gas fees in ETH, users pay a flat fee (e.g., $2.99 on Mainnet, $0.99 on L2) regardless of network congestion.
 
-1. The example hook [Counter.sol](src/Counter.sol) demonstrates the `beforeSwap()` and `afterSwap()` hooks
-2. The test template [Counter.t.sol](test/Counter.t.sol) preconfigures the v4 pool manager, test tokens, and test liquidity.
+The hook implements an **individual savings/borrowing mechanism** where users accumulate credits during low-gas periods and draw down during high-gas periods, effectively hedging their own gas cost exposure over time.
 
-<details>
-<summary>Updating to v4-template:latest</summary>
+---
 
-This template is actively maintained -- you can update the v4 dependencies, scripts, and helpers:
+## Problem Statement
 
-```bash
-git remote add template https://github.com/uniswapfoundation/v4-template
-git fetch template
-git merge template/main <BRANCH> --allow-unrelated-histories
+### Commodity-Denominated Fees Are Hard to Forecast
+
+In traditional finance, commodity costs (e.g., oil storage as % of barrels) are hedged using forward contracts to reduce variability for financial planning departments.
+
+**In DeFi:**
+- Gas fees are denominated in ETH (a volatile commodity)
+- Network congestion causes fees to spike 10-100x during peak times
+- Institutional treasury departments cannot forecast costs accurately
+- CFOs require predictable operating expenses for budgeting
+
+**Example scenario:**
+```
+Low congestion:  Swap costs $0.50 in gas
+High congestion: Same swap costs $30-50 in gas
 ```
 
-</details>
+Enterprises need **fixed, predictable costs** to justify DeFi integration.
 
-### Requirements
+---
 
-This template is designed to work with Foundry (stable). If you are using Foundry Nightly, you may encounter compatibility issues. You can update your Foundry installation to the latest stable version by running:
+## Solution
 
-```
-foundryup
-```
+### Fixed-Fee Swaps with Individual Gas Hedging
 
-To set up the project, run the following commands in your terminal to install dependencies and run the tests:
+**Pricing:**
+- **Mainnet (L1):** $2.99 USDC per swap
+- **L2 (Base/Arbitrum/Unichain):** $0.99 USDC per swap
 
-```
-forge install
-forge test
-```
+**Mechanism:**
+1. Users pay a fixed USDC fee for every swap
+2. During low-gas periods: Surplus accumulates as "credits" in their account
+3. During high-gas periods: Credits are drawn down to subsidize excess costs
+4. Over time, users hedge their own gas exposure through temporal diversification
 
-### Local Development
+**Combined with ERC-4337 Paymaster:**
+- Users sign transactions without needing ETH
+- Paymaster executes transactions using pooled funds
+- Users experience "zero gas" UX while maintaining cost predictability
 
-Other than writing unit tests (recommended!), you can only deploy & test hooks on [anvil](https://book.getfoundry.sh/anvil/) locally. Scripts are available in the `script/` directory, which can be used to deploy hooks, create pools, provide liquidity and swap tokens. The scripts support both local `anvil` environment as well as running them directly on a production network.
+---
 
-### Executing locally with using **Anvil**:
+## How It Works
 
-1. Start Anvil (or fork a specific chain using anvil):
-
-```bash
-anvil
-```
-
-or
-
-```bash
-anvil --fork-url <YOUR_RPC_URL>
-```
-
-2. Execute scripts:
-
-```bash
-forge script script/00_DeployHook.s.sol \
-    --rpc-url http://localhost:8545 \
-    --private-key <PRIVATE_KEY> \
-    --broadcast
-```
-
-### Using **RPC URLs** (actual transactions):
-
-:::info
-It is best to not store your private key even in .env or enter it directly in the command line. Instead use the `--account` flag to select your private key from your keystore.
-:::
-
-### Follow these steps if you have not stored your private key in the keystore:
-
-<details>
-
-1. Add your private key to the keystore:
-
-```bash
-cast wallet import <SET_A_NAME_FOR_KEY> --interactive
-```
-
-2. You will prompted to enter your private key and set a password, fill and press enter:
+### Architecture Components
 
 ```
-Enter private key: <YOUR_PRIVATE_KEY>
-Enter keystore password: <SET_NEW_PASSWORD>
+┌─────────────────────────────────────────────────────┐
+│                      User                           │
+│  Pays: Fixed $2.99 USDC (L1) or $0.99 (L2)          │
+└──────────────────┬──────────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────┐
+│              USDC Fixed-Fee Hook                    │
+│  • Tracks individual user balances                  │
+│  • Accumulates credits (low gas periods)            │
+│  • Draws down credits (high gas periods)            │
+│  • Enforces credit limits based on lifetime contrib │
+└──────────────────┬──────────────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────────────┐
+│         ERC-4337 Paymaster                          │
+│  • Executes transactions on behalf of user          │
+│  • Pays gas in ETH from pooled treasury             │
+│  • Settles costs via hook accounting system         │
+└─────────────────────────────────────────────────────┘
 ```
 
-You should see this:
+### User Balance Model (Individual Savings)
 
-```
-`<YOUR_WALLET_PRIVATE_KEY_NAME>` keystore was saved successfully. Address: <YOUR_WALLET_ADDRESS>
-```
+```solidity
+mapping(address => int256) public userBalance;  // Can go negative (borrowing)
+mapping(address => uint256) public lifetimeContribution;
 
-::: warning
-Use `history -c` to clear your command history.
-:::
-
-</details>
-
-1. Execute scripts:
-
-```bash
-forge script script/00_DeployHook.s.sol \
-    --rpc-url <YOUR_RPC_URL> \
-    --account <YOUR_WALLET_PRIVATE_KEY_NAME> \
-    --sender <YOUR_WALLET_ADDRESS> \
-    --broadcast
+Credit limit = lifetimeContribution * 50%  // Can borrow up to 50% of lifetime contributions
 ```
 
-You will prompted to enter your wallet password, fill and press enter:
+**Example flow:**
 
-```
-Enter keystore password: <YOUR_PASSWORD>
-```
+| Swap # | Gas Cost | Fixed Fee | Surplus/Deficit | User Balance |
+|--------|----------|-----------|-----------------|--------------|
+| 1      | $0.50    | $2.99     | +$2.49          | +$2.49       |
+| 2      | $1.00    | $2.99     | +$1.99          | +$4.48       |
+| 3      | $8.00    | $2.99     | -$5.01          | -$0.53       |
+| 4      | $0.75    | $2.99     | +$2.24          | +$1.71       |
 
-### Key Modifications to note:
+**Average cost over 4 swaps:** $2.99 
 
-1. Update the `token0` and `token1` addresses in the `BaseScript.sol` file to match the tokens you want to use in the network of your choice for sepolia and mainnet deployments.
-2. Update the `token0Amount` and `token1Amount` in the `CreatePoolAndAddLiquidity.s.sol` file to match the amount of tokens you want to provide liquidity with.
-3. Update the `token0Amount` and `token1Amount` in the `AddLiquidity.s.sol` file to match the amount of tokens you want to provide liquidity with.
-4. Update the `amountIn` and `amountOutMin` in the `Swap.s.sol` file to match the amount of tokens you want to swap.
+### Why Individual vs Mutualized Pool?
 
-### Verifying the hook contract
+**Individual model advantages:**
+- ✅ No free-rider problem: Users only use what they've saved
+- ✅ No bank-run risk: Your balance is yours
+- ✅ Simpler governance: No pool management needed
+- ✅ Better regulatory posture: Not pooling customer funds
+- ✅ Fair attribution: Direct relationship between contribution and benefit
 
-```bash
-forge verify-contract \
-  --rpc-url <URL> \
-  --chain <CHAIN_NAME_OR_ID> \
-  # Generally etherscan
-  --verifier <Verification_Provider> \
-  # Use --etherscan-api-key <ETHERSCAN_API_KEY> if you are using etherscan
-  --verifier-api-key <Verification_Provider_API_KEY> \
-  --constructor-args <ABI_ENCODED_ARGS> \
-  --num-of-optimizations <OPTIMIZER_RUNS> \
-  <Contract_Address> \
-  <path/to/Contract.sol:ContractName>
-  --watch
-```
+**With credit limits:**
+- New users can borrow (up to 50% of lifetime contributions)
+- Long-term users earn higher credit lines
+- System remains solvent by design
 
-### Troubleshooting
+---
 
-<details>
+## Technical Implementation
 
-#### Permission Denied
+### Hook Permissions Required
 
-When installing dependencies with `forge install`, Github may throw a `Permission Denied` error
-
-Typically caused by missing Github SSH keys, and can be resolved by following the steps [here](https://docs.github.com/en/github/authenticating-to-github/connecting-to-github-with-ssh)
-
-Or [adding the keys to your ssh-agent](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/generating-a-new-ssh-key-and-adding-it-to-the-ssh-agent#adding-your-ssh-key-to-the-ssh-agent), if you have already uploaded SSH keys
-
-#### Anvil fork test failures
-
-Some versions of Foundry may limit contract code size to ~25kb, which could prevent local tests to fail. You can resolve this by setting the `code-size-limit` flag
-
-```
-anvil --code-size-limit 40000
+```solidity
+beforeSwap: true           // Collect fixed USDC fee
+afterSwap: true            // Calculate gas subsidy/charge
+beforeSwapReturnDelta: true    // Modify swap amounts
+afterSwapReturnDelta: true     // Return subsidies/charges
 ```
 
-#### Hook deployment failures
+### Core Logic (Simplified)
 
-Hook deployment failures are caused by incorrect flags or incorrect salt mining
+```solidity
+function _afterSwap(...) internal override returns (bytes4, int128) {
+    // Estimate actual gas cost in USDC
+    uint256 actualGasCostUSDC = estimateGasCost();
 
-1. Verify the flags are in agreement:
-   - `getHookCalls()` returns the correct flags
-   - `flags` provided to `HookMiner.find(...)`
-2. Verify salt mining is correct:
-   - In **forge test**: the _deployer_ for: `new Hook{salt: salt}(...)` and `HookMiner.find(deployer, ...)` are the same. This will be `address(this)`. If using `vm.prank`, the deployer will be the pranking address
-   - In **forge script**: the deployer must be the CREATE2 Proxy: `0x4e59b44847b379578588920cA78FbF26c0B4956C`
-     - If anvil does not have the CREATE2 deployer, your foundry may be out of date. You can update it with `foundryup`
+    int256 delta = int256(TARGET_FEE) - int256(actualGasCostUSDC);
 
-</details>
+    if (delta > 0) {
+        // Surplus: User accumulates credits
+        userBalance[user] += delta;
+        lifetimeContribution[user] += delta;
+    } else {
+        // Deficit: User draws down credits
+        int256 deficit = -delta;
+        uint256 creditLimit = lifetimeContribution[user] / 2;
+        require(userBalance[user] >= -int256(creditLimit), "Credit limit exceeded");
+        userBalance[user] += delta;
+    }
 
-### Additional Resources
+    return (BaseHook.afterSwap.selector, 0);
+}
+```
 
-- [Uniswap v4 docs](https://docs.uniswap.org/contracts/v4/overview)
-- [v4-periphery](https://github.com/uniswap/v4-periphery)
-- [v4-core](https://github.com/uniswap/v4-core)
-- [v4-by-example](https://v4-by-example.org)
+---
+
+## Advantages
+
+### For Users
+- **Predictable costs:** Budget exactly for DeFi operations
+- **No ETH needed:** Paymaster handles gas, users only pay USDC
+- **Self-hedging:** Temporal diversification of gas exposure
+- **Stablecoin denomination:** No ETH price exposure
+
+### For Institutions
+- **CFO-friendly:** Fixed line item in OpEx budget
+- **Compliance:** Easier to audit and report
+- **Planning:** Can forecast DeFi costs quarterly/annually
+- **Risk management:** Eliminates gas spike surprises
+
+### For the Protocol
+- **Sustainable economics:** Fee covers average gas + margin
+- **No adverse selection:** Individual balances prevent gaming
+- **Scalable:** Works for 10 users or 10,000 users
+- **Capital efficient:** No need for massive reserve pools
+
+---
+
+## Use Cases
+
+### 1. Institutional Treasury Management
+**Scenario:** Hedge fund executes 500 swaps/month
+
+**Traditional DeFi:**
+- Gas costs: $25,000 - $75,000/month (highly variable)
+- Budget uncertainty prevents allocation
+
+**With Fixed-Fee Hook:**
+- Gas costs: $1,495/month (500 × $2.99) on Mainnet
+- Predictable, can allocate larger size
+
+### 2. Retail DeFi Subscription
+**Scenario:** User swaps weekly for DCA strategy
+
+**Traditional DeFi:**
+- Some weeks pay $2, some weeks pay $40
+- Frustration during high-gas periods
+
+**With Fixed-Fee Hook:**
+- Always pays $0.99 (on L2)
+- Builds credits during normal weeks
+- Uses credits during congestion
+
+### 3. Cross-Border Remittances
+**Scenario:** Monthly stablecoin transfers
+
+**Traditional DeFi:**
+- Unpredictable fees hurt low-income users
+- Gas spikes make small transfers uneconomical
+
+**With Fixed-Fee Hook:**
+- Fixed $0.99 per transfer
+- Budgetable for remittance services
+
+---
+
+## Next Steps
+
+### Phase 1: MVP Development
+- [x] Design individual savings/borrowing model
+- [ ] Implement hook with credit accounting
+- [ ] Gas oracle integration (Chainlink + fallback)
+- [ ] ERC-4337 Paymaster contract
+- [ ] UserOperation validation logic
+- [ ] Testing on testnet
+- [ ] Frontend wallet integration (Safe, Biconomy)
+
+### Phase 2: Multi-Chain Deployment
+- [ ] Deploy on Base (low gas, high throughput)
+- [ ] Deploy on Arbitrum (established liquidity)
+- [ ] Deploy on Unichain (native integration)
+- [ ] Mainnet deployment (institutional focus)
+
+### Phase 3: Treasury Optimization
+- [ ] **Deploy idle USDC to yield-bearing protocols**
+  - AAVE for lending (5% APY on USDC)
+  - Compound or Morpho as alternatives
+  - Circuit breakers for liquidity management
+- [ ] Dynamic rebalancing based on utilization
+- [ ] Risk management framework (max deployed %, withdraw limits)
+
+### Phase 4: Advanced Features
+- [ ] Tiered pricing (volume discounts)
+- [ ] Corporate subscription plans
+- [ ] Analytics dashboard for users
+- [ ] Governance token for fee-sharing
+
+---
+
+## Appendix
+
+### A. AAVE Yield Integration - Break-Even Analysis
+
+Deploying idle treasury USDC to AAVE for yield generation.
+
+**Assumptions:**
+- USDC APY on AAVE: 5%
+- Gas costs for supply/withdraw operations
+- Need to maintain minimum liquid balance for withdrawals
+
+#### Break-Even Treasury Sizes
+
+| Chain | Supply Gas | Withdraw Gas | Total Gas Cost | Min Balance (30d) | Min Balance (7d) | Min Balance (1d) |
+|-------|------------|--------------|----------------|-------------------|------------------|------------------|
+| **Mainnet** | $15 | $22 | $37 | $8,880 | $38,000 | $266,400 |
+| **Base** | $0.01 | $0.02 | $0.03 | $7 | $31 | $216 |
+| **Arbitrum** | $0.01 | $0.03 | $0.04 | $10 | $41 | $288 |
+| **Unichain** | $0.01 | $0.02 | $0.03 | $7 | $31 | $216 |
+
+**Interpretation:**
+- **Mainnet:** Only profitable if treasury > $50k and rebalancing weekly
+- **L2s:** Profitable at almost any scale due to negligible gas costs
+
+**Recommended strategy:**
+- **L1:** Keep 100% liquid until treasury > $500k
+- **L2:** Deploy 70% to AAVE once treasury > $10k, keep 30% liquid
+
+---
+
+### B. Gas Cost Assumptions by Chain
+
+Fixed fee pricing is based on average gas consumption across typical swap scenarios.
+
+#### Contract Gas Usage Estimates
+
+| Operation | Gas Used | Notes |
+|-----------|----------|-------|
+| beforeSwap hook | 50,000 | USDC transfer + accounting |
+| afterSwap hook | 80,000 | Gas calculation + balance update + oracle read |
+| Base swap (Uniswap v4) | 100,000 | Core routing logic |
+| **Total per swap** | **230,000** | Approximate |
+
+#### Gas Prices by Chain (2025 Averages)
+
+| Chain | Avg Gas Price | Low Congestion | High Congestion | Avg Cost per Swap |
+|-------|---------------|----------------|-----------------|-------------------|
+| **Mainnet** | 30 gwei | 15 gwei ($0.50) | 150 gwei ($5.00) | **$1.50** |
+| **Base** | 0.005 gwei | 0.002 gwei ($0.001) | 0.02 gwei ($0.01) | **$0.002** |
+| **Arbitrum** | 0.01 gwei | 0.005 gwei ($0.002) | 0.05 gwei ($0.02) | **$0.004** |
+| **Unichain** | 0.003 gwei | 0.001 gwei ($0.0005) | 0.01 gwei ($0.005) | **$0.001** |
+
+**ETH Price Assumption:** $3,000
+
+#### Fixed Fee Pricing Strategy
+
+| Chain | Avg Gas Cost | Fixed Fee | Margin | Margin % |
+|-------|--------------|-----------|--------|----------|
+| **Mainnet** | $1.50 | **$2.99** | $1.49 | 99% |
+| **Base** | $0.002 | **$0.99** | $0.988 | 49,400% |
+| **Arbitrum** | $0.004 | **$0.99** | $0.986 | 24,650% |
+| **Unichain** | $0.001 | **$0.99** | $0.989 | 98,900% |
+
+**Notes:**
+- L1 pricing includes buffer for gas spikes (150 gwei scenarios)
+- L2 pricing optimized for user acquisition (high margin but competitive)
+- Revenue from margins can fund:
+  - Protocol development
+  - Insurance pool for extreme gas events
+  - Yield generation (reducing effective user costs)
+
+---
+
+### C. Risk Management Parameters
+
+#### Per-User Limits
+
+| Parameter | Mainnet | L2s | Rationale |
+|-----------|---------|-----|-----------|
+| Max negative balance | $50 | $20 | Prevent single user from depleting treasury |
+| Credit limit formula | 50% of lifetime contribution | 50% of lifetime contribution | Ensures users have "skin in the game" |
+| Max subsidy per swap | $20 | $5 | Circuit breaker for extreme events |
+
+#### Protocol-Wide Limits
+
+| Parameter | Mainnet | L2s | Rationale |
+|-----------|---------|-----|-----------|
+| Min liquid treasury | 30% | 20% | Always maintain withdrawal capacity |
+| Max deployed to AAVE | 70% | 80% | Reduce smart contract risk |
+| Emergency mode threshold | Treasury < 10% of 30d avg | Treasury < 10% of 30d avg | Reduce subsidies during stress |
+
+---
+
+### D. Economic Sustainability Model
+
+#### Revenue Sources
+
+1. **Spread margin:** Fixed fee - Average gas cost
+2. **Yield on treasury:** AAVE/Compound interest (Phase 3)
+3. **Subscription tiers:** Premium users pay monthly flat fee for unlimited swaps (Phase 4)
+
+#### Cost Structure
+
+1. **Gas subsidies:** High congestion periods
+2. **Oracle costs:** Chainlink price feeds (~$0.10/read on L1, negligible on L2)
+3. **Infrastructure:** Paymaster execution costs (if used)
+4. **Development:** Ongoing maintenance and upgrades
+
+#### Profitability Scenarios (Monthly)
+
+**Mainnet (1000 swaps/month):**
+```
+Revenue:  1000 × $2.99 = $2,990
+Costs:    1000 × $1.50 = $1,500 (avg gas)
+          Oracle: $100
+          Dev: $0 (amortized)
+Profit:   $1,390/month (46% margin)
+```
+
+**Base (10,000 swaps/month):**
+```
+Revenue:  10,000 × $0.99 = $9,900
+Costs:    10,000 × $0.002 = $20 (avg gas)
+          Oracle: $5
+          Dev: $0 (amortized)
+Profit:   $9,875/month (99.7% margin)
+
+Additional yield (if $100k treasury @ 5% APY):
+          $100,000 × 0.05 / 12 = $417/month
+Total:    $10,292/month
+```
+
+---
+
+## License
+
+MIT
+
+---
+
+## Contact
+
+For questions, partnerships, or enterprise integration:
+- **Email:** diego@odisealabs.com
+- **Twitter:** @OdiseaLabs
+- **GitHub:** github.com/odisealabs/usdc-fees-hook
+
+---
+
+**Disclaimer:** This is a design document. Smart contracts have not been audited. Use at your own risk. Gas cost estimates are approximations and may vary based on network conditions, ETH price, and contract optimizations.
