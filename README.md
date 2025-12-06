@@ -89,7 +89,7 @@ Enterprises need **fixed, predictable costs** to justify DeFi integration.
 mapping(address => int256) public userBalance;  // Can go negative (borrowing)
 mapping(address => uint256) public lifetimeContribution;
 
-Credit limit = lifetimeContribution * 50%  // Can borrow up to 50% of lifetime contributions
+Credit limit = lifetimeContribution * 50%  // Can borrow up to 50% of lifetime contributions (fees paid in USDC)
 ```
 
 **Example flow:**
