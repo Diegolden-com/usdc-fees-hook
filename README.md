@@ -126,8 +126,8 @@ Credit limit = lifetimeContribution * 50%  // Can borrow up to 50% of lifetime c
 ```solidity
 beforeSwap: true           // Collect fixed USDC fee
 afterSwap: true            // Calculate gas subsidy/charge
-beforeSwapReturnDelta: true    // Modify swap amounts
-afterSwapReturnDelta: true     // Return subsidies/charges
+beforeSwapReturnDelta: false    // NO modification of swap amounts (using transferFrom)
+afterSwapReturnDelta: false     // NO accounting only, no delta modification
 ```
 
 ### Core Logic (Simplified)
