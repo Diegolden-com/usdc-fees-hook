@@ -15,7 +15,7 @@ const ETH_ADDRESS = '0x0000000000000000000000000000000000000000' // Native ETH i
 // Pool configuration for USDC/ETH on Unichain Sepolia
 const POOL_FEE = 3000 // 0.3% fee tier
 const TICK_SPACING = 60
-const HOOKS_ADDRESS = '0x0000000000000000000000000000000000000000' // No hooks
+const HOOKS_ADDRESS = '0xA24fEe104Fe00987AfC2714469159Cd3D8b840c0' // USDCFixedFeeHook
 
 // Fixed fee for L2 (Unichain)
 const FIXED_FEE_USDC = 0.99
@@ -289,6 +289,23 @@ export function SwapInterface() {
                             </a>
                         </div>
                     )}
+                </div>
+
+                <div className="mt-8 text-center">
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-secondary/30 text-xs text-muted-foreground border border-border">
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        Live on Unichain Sepolia
+                        <span className="mx-2">|</span>
+                        Hook: 0xA24...40c0
+                        <a
+                            href="https://sepolia.uniscan.xyz/address/0xA24fEe104Fe00987AfC2714469159Cd3D8b840c0"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="ml-1 text-primary hover:underline"
+                        >
+                            (Verified)
+                        </a>
+                    </div>
                 </div>
             </div>
         </section>
