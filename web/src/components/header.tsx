@@ -2,9 +2,11 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { usePrivy } from '@privy-io/react-auth'
 
 export function Header() {
   const [isOpen, setIsOpen] = useState(false)
+  const { login, authenticated, user, logout } = usePrivy()
 
   return (
     <header className="sticky top-0 z-50 bg-background border-b border-border">
@@ -27,18 +29,21 @@ export function Header() {
             <a href="#benefits" className="text-sm text-muted-foreground hover:text-foreground transition">
               Benefits
             </a>
-            <a href="#calculator" className="text-sm text-muted-foreground hover:text-foreground transition">
-              Calculator
+            <a href="#swap" className="text-sm text-muted-foreground hover:text-foreground transition">
+              Swap
             </a>
           </nav>
 
           <div className="hidden sm:flex items-center gap-4">
-            <Button variant="outline" size="sm">
-              Documentation
-            </Button>
-            <Button size="sm" className="bg-primary hover:bg-primary/90">
-              Get Started
-            </Button>
+            {!authenticated ? (
+              <Button size="sm" className="bg-primary hover:bg-primary/90" onClick={login}>
+                Log In
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" onClick={logout} title="Click to logout">
+                {user?.wallet?.address?.slice(0, 6)}...{user?.wallet?.address?.slice(-4)}
+              </Button>
+            )}
           </div>
 
           <button className="md:hidden" onClick={() => setIsOpen(!isOpen)}>
@@ -59,9 +64,18 @@ export function Header() {
             <a href="#benefits" className="text-sm text-muted-foreground hover:text-foreground">
               Benefits
             </a>
-            <Button size="sm" className="w-full bg-primary hover:bg-primary/90">
-              Get Started
-            </Button>
+            <a href="#swap" className="text-sm text-muted-foreground hover:text-foreground">
+              Swap
+            </a>
+            {!authenticated ? (
+              <Button size="sm" className="w-full bg-primary hover:bg-primary/90" onClick={login}>
+                Log In
+              </Button>
+            ) : (
+              <Button size="sm" variant="outline" className="w-full" onClick={logout}>
+                Logout ({user?.wallet?.address?.slice(0, 4)}...{user?.wallet?.address?.slice(-4)})
+              </Button>
+            )}
           </nav>
         )}
       </div>

@@ -9,11 +9,6 @@ export function Hero() {
 
       <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center">
-          <div className="inline-flex items-center gap-2 bg-muted px-3 py-1 rounded-full mb-6">
-            <span className="w-2 h-2 bg-accent rounded-full" />
-            <span className="text-xs font-medium text-muted-foreground">New: Batch operations now available</span>
-          </div>
-
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             Fixed-Fee Swaps
             <span className="block text-accent">No More Gas Surprises</span>
@@ -35,12 +30,12 @@ export function Hero() {
 
           <div className="mt-12 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
             <div className="text-center">
-              <div className="text-2xl sm:text-3xl font-bold text-accent mb-1">0.05%</div>
+              <div className="text-2xl sm:text-3xl font-bold text-accent mb-1">From $0.99</div>
               <p className="text-xs sm:text-sm text-muted-foreground">Fixed Fee</p>
             </div>
             <div className="text-center">
               <div className="text-2xl sm:text-3xl font-bold text-accent mb-1">100M+</div>
-              <p className="text-xs sm:text-sm text-muted-foreground">Daily Volume</p>
+              <p className="text-xs sm:text-sm text-muted-foreground">Total Addressable Market</p>
             </div>
             <div className="text-center">
               <div className="text-2xl sm:text-3xl font-bold text-accent mb-1">$2M+</div>
