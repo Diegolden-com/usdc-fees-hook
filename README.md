@@ -12,6 +12,17 @@ The hook implements an **individual savings/borrowing mechanism** where users ac
 
 ---
 
+## Deployment Status
+
+**Live on Unichain Sepolia Testnet** 🟢
+
+- **Hook Contract:** `0xA24fEe104Fe00987AfC2714469159Cd3D8b840c0`
+- **USDC Address:** `0x31d0220469e10c4E71834a79b1f276d740d3768F`
+- **Verified:** Yes ✅
+- **Explorer:** [View on Uniscan](https://sepolia.uniscan.xyz/address/0xa24fee104fe00987afc2714469159cd3d8b840c0)
+
+---
+
 ## Problem Statement
 
 ### Commodity-Denominated Fees Are Hard to Forecast
