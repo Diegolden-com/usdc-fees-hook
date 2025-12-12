@@ -2,23 +2,76 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { usePrivy, useSendTransaction } from '@privy-io/react-auth'
-import { parseEther, createPublicClient, http, formatUnits, parseUnits } from 'viem'
+import { usePrivy, useSendTransaction, useWallets } from '@privy-io/react-auth'
+import { parseEther, createPublicClient, http, formatUnits, parseUnits, encodeFunctionData } from 'viem'
 import { unichainSepolia } from 'viem/chains'
 import { ArrowDown, Loader2 } from "lucide-react"
 
-// Unichain Sepolia addresses
-const QUOTER_ADDRESS = '0x56dcd40a3f2d466f48e7f48bdbe5cc9b92ae4472'
-const USDC_ADDRESS = '0x31d0220469e10c4E71834a79b1f276d740d3768F'
-const ETH_ADDRESS = '0x0000000000000000000000000000000000000000' // Native ETH in v4
+// --- Constants & Config ---
+const DEPLOYMENT = {
+    poolManager: "0x00B036B58a818B1BC34d502D3fE730Db729e62AC",
+    swapRouter: "0x9cD2b0a732dd5e023a5539921e0FD1c30E198Dba",
+    hook: "0xA24fEe104Fe00987AfC2714469159Cd3D8b840c0",
+    usdc: "0x31d0220469e10c4E71834a79b1f276d740d3768F",
+    weth: "0x4200000000000000000000000000000000000006"
+}
 
-// Pool configuration for USDC/ETH on Unichain Sepolia
-const POOL_FEE = 3000 // 0.3% fee tier
-const TICK_SPACING = 60
-const HOOKS_ADDRESS = '0xA24fEe104Fe00987AfC2714469159Cd3D8b840c0' // USDCFixedFeeHook
+// Pool configuration for USDC/WETH on Unichain Sepolia
+const POOL_KEY = {
+    currency0: DEPLOYMENT.usdc < DEPLOYMENT.weth ? DEPLOYMENT.usdc : DEPLOYMENT.weth,
+    currency1: DEPLOYMENT.usdc < DEPLOYMENT.weth ? DEPLOYMENT.weth : DEPLOYMENT.usdc,
+    fee: 3000,
+    tickSpacing: 60,
+    hooks: DEPLOYMENT.hook
+}
 
-// Fixed fee for L2 (Unichain)
 const FIXED_FEE_USDC = 0.99
+
+// --- ABIs ---
+const ERC20_ABI = [
+    {
+        name: 'approve',
+        type: 'function',
+        stateMutability: 'nonpayable',
+        inputs: [{ name: 'spender', type: 'address' }, { name: 'amount', type: 'uint256' }],
+        outputs: [{ name: '', type: 'bool' }]
+    },
+    {
+        name: 'allowance',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [{ name: 'owner', type: 'address' }, { name: 'spender', type: 'address' }],
+        outputs: [{ name: '', type: 'uint256' }]
+    }
+]
+
+const ROUTER_ABI = [
+    {
+        name: 'swapExactTokensForTokens',
+        type: 'function',
+        stateMutability: 'payable',
+        inputs: [
+            { name: 'amountIn', type: 'uint256' },
+            { name: 'amountOutMin', type: 'uint256' },
+            { name: 'zeroForOne', type: 'bool' },
+            {
+                name: 'poolKey',
+                type: 'tuple',
+                components: [
+                    { name: 'currency0', type: 'address' },
+                    { name: 'currency1', type: 'address' },
+                    { name: 'fee', type: 'uint24' },
+                    { name: 'tickSpacing', type: 'int24' },
+                    { name: 'hooks', type: 'address' }
+                ]
+            },
+            { name: 'hookData', type: 'bytes' },
+            { name: 'receiver', type: 'address' },
+            { name: 'deadline', type: 'uint256' }
+        ],
+        outputs: [{ name: 'delta', type: 'int256' }]
+    }
+]
 
 // Quoter ABI for quoteExactInputSingle
 const QUOTER_ABI = [
@@ -56,7 +109,9 @@ const QUOTER_ABI = [
     }
 ] as const
 
-// Create viem client for quote fetching (outside component to avoid recreating)
+const QUOTER_ADDRESS = '0x56dcd40a3f2d466f48e7f48bdbe5cc9b92ae4472'
+
+// Create viem client for quote fetching
 const publicClient = createPublicClient({
     chain: unichainSepolia,
     transport: http()
@@ -77,11 +132,12 @@ async function getEthPriceFromCoinGecko(): Promise<number> {
 export function SwapInterface() {
     const [amount, setAmount] = useState("1000")
     const { login, authenticated, user } = usePrivy()
+    const [isLoading, setLoading] = useState<boolean>(false)
     const [txHash, setTxHash] = useState<string>('')
     const [status, setStatus] = useState<string>('')
-    const [isLoading, setLoading] = useState<boolean>(false)
     const [ethOutput, setEthOutput] = useState<number>(0)
     const [isLoadingQuote, setIsLoadingQuote] = useState<boolean>(false)
+    const [allowance, setAllowance] = useState<bigint>(BigInt(0))
 
     // Fee calculation - fixed amount in USDC
     const fee = FIXED_FEE_USDC
@@ -97,22 +153,17 @@ export function SwapInterface() {
 
             setIsLoadingQuote(true)
             try {
-                // Convert USDC amount to proper units (6 decimals)
                 const usdcAmount = parseUnits(amountAfterFee.toString(), 6)
 
-                // ETH (0x0000...) < USDC, so ETH is currency0, USDC is currency1
-                // We're swapping USDC -> ETH, so zeroForOne = false (currency1 -> currency0)
-                const poolKey = {
-                    currency0: ETH_ADDRESS,
-                    currency1: USDC_ADDRESS,
-                    fee: POOL_FEE,
-                    tickSpacing: TICK_SPACING,
-                    hooks: HOOKS_ADDRESS
-                }
+                // USDC is usually currency0 or currency1 depending on address sort
+                // POOL_KEY is already sorted. We need to find if we are swapping 0->1 or 1->0
+                // We are swapping USDC -> WETH
+                // If USDC == currency0, zeroForOne = true
+                const zeroForOne = DEPLOYMENT.usdc.toLowerCase() === POOL_KEY.currency0.toLowerCase()
 
                 const params = {
-                    poolKey,
-                    zeroForOne: false, // USDC -> ETH
+                    poolKey: POOL_KEY,
+                    zeroForOne: zeroForOne,
                     exactAmount: usdcAmount,
                     sqrtPriceLimitX96: BigInt(0), // No price limit
                     hookData: '0x' as `0x${string}`
@@ -141,56 +192,108 @@ export function SwapInterface() {
         }
 
         fetchQuote()
-    }, [amountAfterFee])
+    }, [amountAfterFee]) // Removed authenticated dependency to allow quoting without login
+
+    const checkAllowance = async () => {
+        try {
+            const data = await publicClient.readContract({
+                address: DEPLOYMENT.usdc as `0x${string}`,
+                abi: ERC20_ABI,
+                functionName: 'allowance',
+                args: [user?.wallet?.address as `0x${string}`, DEPLOYMENT.swapRouter as `0x${string}`]
+            }) as bigint
+            setAllowance(data)
+        } catch (e) {
+            console.error("Error fetching allowance", e)
+        }
+    }
 
     const { sendTransaction } = useSendTransaction({
         onSuccess: (receipt: any) => {
             console.log("Transaction sent:", receipt);
-            // Handle both string hash or object with hash property
             const hash = typeof receipt === 'string' ? receipt : receipt?.transactionHash || receipt?.hash || '';
             setTxHash(hash);
-            setStatus('Swap submitted!');
             setLoading(false);
+
+            // If we just approved, update status and re-check allowance
+            if (status === 'Approving...') {
+                setStatus('Approved! You can now swap.')
+                checkAllowance()
+            } else {
+                setStatus('Swap submitted!')
+            }
         },
         onError: (error: any) => {
-            console.error("Swap Error:", error);
-            setStatus(error?.message || 'Swap failed');
+            console.error("Action Error:", error);
+            setStatus(error?.message || 'Transaction failed');
             setLoading(false);
         }
     });
 
-    const handleSwap = async () => {
-        console.log("Swap button clicked");
-
+    const handleAction = async () => {
         if (!authenticated) {
-            console.log("User not authenticated, invoking login()");
             login()
             return
         }
 
+        setLoading(true)
+        setTxHash('')
+
         try {
-            setLoading(true);
-            setStatus('Preparing swap...')
-            setTxHash('')
+            const amountInWei = parseUnits(amount, 6) // USDC has 6 decimals? Usually 6. 
+            // NOTE: Double check USDC decimals. Testnet USDC usually 6 or 18. 
+            // Unichain standard USDC: likely 6.
 
-            const transactionRequest = {
-                to: user?.wallet?.address || '0x0000000000000000000000000000000000000000', // Self-send or burn if no address
-                value: parseEther('0'),
-                chainId: 1301 // Unichain Sepolia
-            };
+            // Check if approval needed
+            if (allowance < amountInWei) {
+                setStatus('Approving...')
+                const data = encodeFunctionData({
+                    abi: ERC20_ABI,
+                    functionName: 'approve',
+                    args: [DEPLOYMENT.swapRouter, BigInt(amountInWei) * BigInt(10)] // Approve 10x
+                })
 
-            console.log("Sending transaction request:", transactionRequest);
+                await sendTransaction({
+                    to: DEPLOYMENT.usdc,
+                    data: data,
+                    chainId: 1301
+                })
+            } else {
+                // Execute Swap
+                setStatus('Swapping...')
 
-            // Sending 0 ETH to self as a test for gasless sponsorship
-            // If Smart Wallets are enabled in dashboard, this should be sponsored.
-            await sendTransaction(transactionRequest);
+                // USDC is input. If USDC == currency0, we are selling 0 (zeroForOne = true)
+                const zeroForOne = DEPLOYMENT.usdc.toLowerCase() === POOL_KEY.currency0.toLowerCase()
 
+                const data = encodeFunctionData({
+                    abi: ROUTER_ABI,
+                    functionName: 'swapExactTokensForTokens',
+                    args: [
+                        amountInWei,
+                        BigInt(0), // amountOutMin
+                        zeroForOne,
+                        POOL_KEY,
+                        "0x", // hookData
+                        user?.wallet?.address || '0x0',
+                        BigInt(Math.floor(Date.now() / 1000) + 600) // deadline
+                    ]
+                })
+
+                await sendTransaction({
+                    to: DEPLOYMENT.swapRouter,
+                    data: data,
+                    value: BigInt(0), // USDC swap -> WETH, no ETH value
+                    chainId: 1301
+                })
+            }
         } catch (error: any) {
-            console.error("Swap Error:", error);
-            setStatus(error.message || 'Swap failed')
-            setLoading(false);
+            console.error("Error:", error)
+            setStatus(error.message || "Failed")
+            setLoading(false)
         }
     }
+
+    const needsApproval = allowance < parseUnits(amount || "0", 6)
 
     return (
         <section id="swap" className="py-20 sm:py-32">
@@ -223,7 +326,7 @@ export function SwapInterface() {
                                 <span className="bg-secondary px-3 py-1 rounded-full font-medium ml-2">USDC</span>
                             </div>
                             <div className="text-xs text-muted-foreground mt-2">
-                                Fixed Fee: ${fee.toFixed(2)} USDC
+                                Fixed Fee: $0.99
                             </div>
                         </div>
 
@@ -237,16 +340,9 @@ export function SwapInterface() {
                             <label className="text-xs font-medium text-muted-foreground mb-1 block">You receive</label>
                             <div className="flex justify-between items-center">
                                 <div className="text-2xl font-bold text-foreground">
-                                    {isLoadingQuote ? (
-                                        <Loader2 className="h-6 w-6 animate-spin" />
-                                    ) : (
-                                        ethOutput.toFixed(6)
-                                    )}
+                                    -- {/* Todo: Quote fetching */}
                                 </div>
                                 <span className="bg-secondary px-3 py-1 rounded-full font-medium ml-2">ETH</span>
-                            </div>
-                            <div className="text-xs text-muted-foreground mt-2">
-                                Amount after fee: ${amountAfterFee.toFixed(2)} USDC
                             </div>
                         </div>
                     </div>
@@ -255,16 +351,18 @@ export function SwapInterface() {
                     <Button
                         size="lg"
                         className="w-full mt-6 text-lg py-6 font-semibold"
-                        onClick={handleSwap}
+                        onClick={handleAction}
                         disabled={isLoading}
                     >
                         {isLoading ? (
                             <>
                                 <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                                {status || 'Swapping...'}
+                                {status}
                             </>
                         ) : !authenticated ? (
                             'Connect Wallet to Swap'
+                        ) : needsApproval ? (
+                            'Approve USDC'
                         ) : (
                             'Swap'
                         )}
