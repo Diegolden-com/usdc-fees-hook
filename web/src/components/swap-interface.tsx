@@ -253,10 +253,17 @@ export function SwapInterface() {
                     args: [DEPLOYMENT.swapRouter, BigInt(amountInWei) * BigInt(10)] // Approve 10x
                 })
 
-                await sendTransaction({
+                console.log("Approving...", {
                     to: DEPLOYMENT.usdc,
                     data: data,
                     chainId: 1301
+                })
+
+                await sendTransaction({
+                    to: DEPLOYMENT.usdc,
+                    data: data,
+                    chainId: 1301,
+                    value: BigInt(0)
                 })
             } else {
                 // Execute Swap
