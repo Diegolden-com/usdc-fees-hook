@@ -28,41 +28,33 @@ This brute-forces a salt in the script. For more complex flag combinations, this
 **Unichain Testnet (Sepolia) Information:**
 - **Chain ID:** 1301
 - **Pool Manager:** `0x00b036b58a818b1bc34d502d3fe730db729e62ac`
-- **RPC URL:** `https://sepolia.unichain.org` (or other provider)
+- **RPC URL:** `https://sepolia.unichain.org`
 - **Explorer:** `https://sepolia.uniscan.xyz`
 
-**Note:** The included `script/base/BaseScript.sol` uses `hookmate/AddressConstants` which **already supports Unichain Testnet (Chain ID 1301)**. You do not need to manually override the `poolManager` address.
+**Important: Tokens**
+The deployment script now supports environment variables for token addresses.
+- **USDC (Unichain Sepolia):** `0x31d0220469e10c4E71834a79b1f276d740d3768F`
+- **Token1 (Dummy/Arb):** `0x4200000000000000000000000000000000000006` (Used to ensure correct ordering if needed, or simply another test token)
 
-To deploy to Unichain Testnet:
+### Deployment Command
+
+To deploy to Unichain Testnet with the correct USDC address:
 
 ```bash
+# Set environment variables for tokens (USDC and a secondary token)
+export TOKEN0=0x31d0220469e10c4E71834a79b1f276d740d3768F
+export TOKEN1=0x4200000000000000000000000000000000000006
+
 forge script script/DeployUSDCFixedFeeHook.s.sol \
-  --rpc-url https://sepolia.unichain.org \
+  --rpc-url unichain_sepolia \
   --broadcast \
   --private-key <YOUR_PRIVATE_KEY> \
-  --verify \
-  --etherscan-api-key <YOUR_ETHERSCAN_API_KEY> \
-  --verifier-url https://api-sepolia.uniscan.xyz/api
+  --verify
 ```
+
+*Note: The script automatically sorts `TOKEN0` and `TOKEN1` to determine `currency0` and `currency1`. Ensure `TOKEN0` is the address you intend to be the USDC fee token if that's how your logic expects it, or check the logs.*
 
 ### 1. Verify Token Addresses
-...
-
-The deployment script relies on `script/base/BaseScript.sol` for token configuration.
-**Before deploying to a live network, verify that `token0` and `token1` in `BaseScript.sol` match the token addresses you want to use (e.g., USDC).**
-
-File: `script/base/BaseScript.sol`
-
-```solidity
-IERC20 internal constant token0 = IERC20(0x...); // Update this
-IERC20 internal constant token1 = IERC20(0x...); // Update this
-```
-
-The hook treats `currency0` (which is the sorted token0) as the USDC token in the current script logic:
-```solidity
-USDCFixedFeeHook hook = new USDCFixedFeeHook{salt: salt}(IPoolManager(address(poolManager)), currency0, fixedFee);
-```
-*Note: Ensure `token0` is actually the USDC token you intend to use, or adjust the script to select the correct currency.*
 
 ## Deployment Command
 

@@ -22,8 +22,8 @@ contract BaseScript is Script, Deployers {
     /////////////////////////////////////
     // --- Configure These ---
     /////////////////////////////////////
-    IERC20 internal constant token0 = IERC20(0x0165878A594ca255338adfa4d48449f69242Eb8F);
-    IERC20 internal constant token1 = IERC20(0xa513E6E4b8f2a923D98304ec87F64353C4D5C853);
+    IERC20 internal immutable token0;
+    IERC20 internal immutable token1;
     IHooks constant hookContract = IHooks(address(0));
     /////////////////////////////////////
 
@@ -31,6 +31,10 @@ contract BaseScript is Script, Deployers {
     Currency immutable currency1;
 
     constructor() {
+        // Configure tokens from environment variables or use defaults (Anvil/Local)
+        token0 = IERC20(vm.envOr("TOKEN0", address(0x0165878A594ca255338adfa4d48449f69242Eb8F)));
+        token1 = IERC20(vm.envOr("TOKEN1", address(0xa513E6E4b8f2a923D98304ec87F64353C4D5C853)));
+
         // Make sure artifacts are available, either deploy or configure.
         deployArtifacts();
 
@@ -57,7 +61,7 @@ contract BaseScript is Script, Deployers {
         }
     }
 
-    function getCurrencies() internal pure returns (Currency, Currency) {
+    function getCurrencies() internal view returns (Currency, Currency) {
         require(address(token0) != address(token1));
 
         if (token0 < token1) {

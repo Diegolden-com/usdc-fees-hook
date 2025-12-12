@@ -12,3 +12,11 @@ via_ir = false
 [lint]
 exclude_lints = ["screaming-snake-case-immutable", "screaming-snake-case-const"]
 lint_on_build = false
+
+[rpc_endpoints]
+unichain_sepolia = "https://sepolia.unichain.org"
+
+[etherscan]
+unichain_sepolia = { key = "PQJAG2GEC858CHRBKMJDBBUJMSGINKTBB6", url = "https://api-sepolia.uniscan.xyz/api" }
+
+
