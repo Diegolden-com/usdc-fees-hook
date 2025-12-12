@@ -89,6 +89,7 @@ export function HowItWorks() {
             {/* Swap History */}
             <div className="space-y-3">
               <p className="text-sm font-medium text-muted-foreground mb-3">Recent Swaps</p>
+              <div className="h-[400px] overflow-y-auto space-y-3">
               {swapHistory.slice(0, currentStep + 1).map((swap, index) => (
                 <div
                   key={index}
@@ -124,6 +125,7 @@ export function HowItWorks() {
                   </div>
                 </div>
               ))}
+              </div>
             </div>
           </div>
         </div>
